@@ -23,7 +23,11 @@ msg "Building binutils..."
 ./build-binutils.py \
 	--targets arm aarch64
 
-# Strip products
+# Remove unused products
+rm -fr install/include
+rm -f install/lib/*.a install/lib/*.la
+
+# Strip remaining products
 msg "Stripping products..."
 for f in $(find install -type f -exec file {} \; | grep 'not stripped' | awk '{print $1}'); do
 	strip ${f: : -1}
