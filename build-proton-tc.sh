@@ -12,8 +12,8 @@ function msg() {
 # Configure LLVM build based on environment or arguments
 if [[ "$1" == "--ci" ]] || [[ "$DRONE" == "true" ]]; then
 	msg "Configuring reduced LLVM build for CI..."
-	llvm_args=(--targets "ARM;AArch64" --shallow-clone)
-	binutils_args=(--targets arm aarch64 --shallow-clone)
+	llvm_args=(--targets "ARM;AArch64;X86" --shallow-clone)
+	binutils_args=(--targets arm aarch64 x86_64 --shallow-clone)
 else
 	msg "Configuring full-fledged LLVM build..."
 	llvm_args=(--targets "ARM;AArch64;X86" --march "native")
