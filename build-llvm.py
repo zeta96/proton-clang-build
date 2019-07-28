@@ -148,6 +148,15 @@ def parse_parameters(root_folder):
 
                         """),
                         action="store_true")
+    parser.add_argument("-s",
+                        "--shallow-clone",
+                        help=textwrap.dedent("""\
+                        Only fetch the required objects and omit history when cloning the LLVM repo. This
+                        speeds up the initial clone, but may break updating to later revisions and thus
+                        necessitate a re-clone in the future.
+
+                        """),
+                        action="store_true")
     parser.add_argument("-p",
                         "--projects",
                         help=textwrap.dedent("""\
@@ -316,7 +325,7 @@ def check_dependencies():
         print(output)
 
 
-def fetch_llvm_binutils(root_folder, update, ref):
+def fetch_llvm_binutils(root_folder, update, ref, shallow=False):
     """
     Download llvm and binutils or update them if they exist
     :param root_folder: Working directory
@@ -332,9 +341,10 @@ def fetch_llvm_binutils(root_folder, update, ref):
             subprocess.run(
                 ["git", "-C", p.as_posix(), "pull", "--rebase"], check=True)
     else:
+        extra_args = ("--depth", "1") if shallow else ()
         utils.print_header("Downloading LLVM")
         subprocess.run([
-            "git", "clone", "-b", ref, "git://github.com/llvm/llvm-project",
+            "git", "clone", "-b", ref, *extra_args, "git://github.com/llvm/llvm-project",
             p.as_posix()
         ],
                        check=True)
@@ -791,7 +801,7 @@ def main():
 
     env_vars = EnvVars(*check_cc_ld_variables(root_folder))
     check_dependencies()
-    fetch_llvm_binutils(root_folder, not args.no_pull, args.branch)
+    fetch_llvm_binutils(root_folder, not args.no_pull, args.branch, args.shallow_clone)
     cleanup(build_folder, args.incremental)
     dirs = Directories(build_folder, install_folder, root_folder)
     do_multistage_build(args, dirs, env_vars)
