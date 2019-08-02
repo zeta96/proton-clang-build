@@ -23,7 +23,7 @@ steps:
           - tag
 
   - name: build
-    image: kdrag0n/fedora-llvm-build:clang-8.0.0
+    image: kdrag0n/debian-llvm-build:buster
 
     commands:
       - .drone/build.sh
@@ -34,7 +34,7 @@ steps:
           - tag
 
   - name: github
-    image: kdrag0n/fedora-llvm-build:clang-8.0.0
+    image: kdrag0n/debian-llvm-build:buster
 
     environment:
       # GitHub personal access token ()
@@ -56,7 +56,7 @@ steps:
           - tag
 
   - name: telegram
-    image: kdrag0n/fedora-llvm-build:clang-8.0.0
+    image: kdrag0n/debian-llvm-build:buster
 
     environment:
       # Telegram chat ID
@@ -83,7 +83,7 @@ steps:
           - tag
 
   - name: debug-wait
-    image: kdrag0n/fedora-llvm-build:clang-8.0.0
+    image: kdrag0n/debian-llvm-build:buster
 
     environment:
       # Amount of time to wait for debugging
