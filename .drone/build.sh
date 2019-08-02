@@ -8,8 +8,8 @@ set -veo pipefail
 time ./build-proton-tc.sh |& tee build.log
 
 # Generate build info
-rel_date="$(date "+%Y%m%e")" # ISO 8601 format
-rel_friendly_date="$(date "+%B %d, %Y")" # "Month day, year" format
+rel_date="$(date "+%Y%m%d")" # ISO 8601 format
+rel_friendly_date="$(date "+%B %-d, %Y")" # "Month day, year" format
 pushd llvm-project
 short_commit="$(cut -c-8 <<< "$(git rev-parse HEAD)")"
 popd
