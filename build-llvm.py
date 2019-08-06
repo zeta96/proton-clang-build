@@ -359,7 +359,7 @@ def fetch_llvm_binutils(root_folder, update, ref, shallow=False):
     # We need it for the LLVMgold plugin, which can be used for LTO with ld.gold,
     # which at the time of writing this, is how the Google Pixel 3 kernel is built
     # and linked.
-    utils.fetch_binutils(root_folder, update, shallow)
+    utils.fetch_binutils(root_folder, update)
 
 
 def cleanup(build_folder, incremental):
