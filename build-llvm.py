@@ -359,7 +359,7 @@ def fetch_llvm_binutils(root_folder, update, ref, shallow=False):
     # We need it for the LLVMgold plugin, which can be used for LTO with ld.gold,
     # which at the time of writing this, is how the Google Pixel 3 kernel is built
     # and linked.
-    utils.fetch_binutils(root_folder, update)
+    utils.download_binutils(root_folder)
 
 
 def cleanup(build_folder, incremental):
@@ -450,7 +450,7 @@ def base_cmake_defines(dirs):
 	# Include polyhedral optimization support
 	'LINK_POLLY_INTO_TOOLS': 'ON',
         # For LLVMgold.so, which is used for LTO with ld.gold
-        'LLVM_BINUTILS_INCDIR': dirs.root_folder.joinpath("binutils", "include").as_posix(),
+        'LLVM_BINUTILS_INCDIR': dirs.root_folder.joinpath(utils.current_binutils(), "include").as_posix(),
         # Don't build bindings; they are for other languages that the kernel does not use
         'LLVM_ENABLE_BINDINGS': 'OFF',
         # We need to enable LLVM plugin support so that LLVMgold.so is loadable
