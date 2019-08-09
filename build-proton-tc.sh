@@ -43,3 +43,15 @@ msg "Stripping remaining products..."
 for f in $(find install -type f -exec file {} \; | grep 'not stripped' | awk '{print $1}'); do
 	strip ${f: : -1}
 done
+
+# Set executable rpaths so setting LD_LIBRARY_PATH isn't necessary
+msg "Setting library paths for porability..."
+for bin in $(find install -type f -exec file {} \; | grep 'ELF .* executable' | awk '{print $1}'); do
+	# Remove last character from file output (':')
+	bin="${bin: : -1}"
+
+	if ldd "$bin" | grep -q "not found"; then
+		echo "Setting rpath on $bin"
+		patchelf --set-rpath '$ORIGIN/../lib' "$bin"
+	fi
+done
