@@ -12,15 +12,19 @@ import textwrap
 import time
 import utils
 
+# This is a known good revision of LLVM for building the kernel
+# To bump this, run 'PATH_OVERRIDE=<path_to_updated_toolchain>/bin kernel/build.sh --allyesconfig'
+GOOD_REVISION = '9aeab53eba0a63829a7f6f8ba878a257530a2dd7'
 
-class Directories():
+
+class Directories:
     def __init__(self, build_folder, install_folder, root_folder):
         self.build_folder = build_folder
         self.install_folder = install_folder
         self.root_folder = root_folder
 
 
-class EnvVars():
+class EnvVars:
     def __init__(self, cc, cxx, ld):
         self.cc = cc
         self.cxx = cxx
@@ -31,6 +35,7 @@ def clang_version(cc, root_folder):
     """
     Returns Clang's version as an integer
     :param cc: The compiler to check the version of
+    :param root_folder: Top of the script folder
     :return: an int denoting the version of the given compiler
     """
     command = [root_folder.joinpath("clang-version.sh").as_posix(), cc]
@@ -45,6 +50,13 @@ def parse_parameters(root_folder):
     """
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument("--assertions",
+                        help=textwrap.dedent("""\
+                        In a release configuration, assertions are not enabled. Assertions can help catch
+                        issues when compiling but it will increase compile times by 15-20%%.
+
+                        """),
+                        action="store_true")
     parser.add_argument("-b",
                         "--branch",
                         help=textwrap.dedent("""\
@@ -83,6 +95,31 @@ def parse_parameters(root_folder):
 
                         """),
                         action="store_true")
+    parser.add_argument("--build-type",
+                        metavar='BUILD_TYPE',
+                        help=textwrap.dedent("""\
+                        By default, the script does a Release build; Debug may be useful for tracking down
+                        particularly nasty bugs.
+
+                        See https://llvm.org/docs/GettingStarted.html#compiling-the-llvm-suite-source-code for
+                        more information.
+
+                        """),
+                        type=str,
+                        choices=['Release', 'Debug', 'RelWithDebInfo', 'MinSizeRel'],
+                        default="Release")
+    parser.add_argument("--check-targets",
+                        help=textwrap.dedent("""\
+                        By default, no testing is run on the toolchain. If you would like to run unit/regression
+                        tests, use this parameter to specify a list of check targets to run with ninja. Common
+                        ones include check-llvm, check-clang, and check-lld.
+
+                        The values passed to this parameter will be automatically concatenated with 'check-'.
+
+                        Example: '--check-targets clang llvm' will make ninja invokve 'check-clang' and 'check-llvm'.
+
+                        """),
+                        nargs="+")
     parser.add_argument("--clang-vendor",
                         help=textwrap.dedent("""\
                         Add this value to the clang version string (like "Apple clang version..." or
@@ -94,17 +131,6 @@ def parse_parameters(root_folder):
                         """),
                         type=str,
                         default="ClangBuiltLinux")
-    parser.add_argument("-d",
-                        "--debug",
-                        help=textwrap.dedent("""\
-                        By default, the script builds LLVM in the release configuration with all of
-                        the tests turned off and optimization at O2. This disables that optimization,
-                        builds the tests, and changes the configuration to debug. This can help with
-                        reporting problems to LLVM developers but will make compilation of both LLVM
-                        and the kernel go slower.
-
-                        """),
-                        action="store_true")
     parser.add_argument("-i",
                         "--incremental",
                         help=textwrap.dedent("""\
@@ -155,10 +181,17 @@ def parse_parameters(root_folder):
                         """),
                         type=str)
     parser.add_argument("-n",
-                        "--no-pull",
+                        "--no-update",
                         help=textwrap.dedent("""\
                         By default, the script always updates the LLVM repo before building. This prevents
-                        that, which can be helpful during something like bisecting.
+                        that, which can be helpful during something like bisecting or manually managing the
+                        repo to pin it to a particular revision.
+
+                        """),
+                        action="store_true")
+    parser.add_argument("--no-ccache",
+                        help=textwrap.dedent("""\
+                        Don't enable LLVM_CCACHE_BUILD. Useful for benchmarking clean builds.
 
                         """),
                         action="store_true")
@@ -197,15 +230,24 @@ def parse_parameters(root_folder):
                         "--targets",
                         help=textwrap.dedent("""\
                         LLVM is multitargeted by default. Currently, this script only enables the arm32, aarch64,
-                        powerpc, and x86 backends because that's what the Linux kernel is currently concerned with.
-                        If you would like to override this, you can use this parameter and supply a list that is
+                        mips, powerpc, and x86 backends because that's what the Linux kernel is currently concerned
+                        with. If you would like to override this, you can use this parameter and supply a list that is
                         supported by LLVM_TARGETS_TO_BUILD: https://llvm.org/docs/CMake.html#llvm-specific-variables
 
                         Example: -t "AArch64;X86"
 
                         """),
                         type=str,
-                        default="AArch64;ARM;PowerPC;X86")
+                        default="AArch64;ARM;Mips;PowerPC;X86")
+    parser.add_argument("--use-good-revision",
+                        help=textwrap.dedent("""\
+                        By default, the script updates LLVM to the latest tip of tree revision, which may at times be
+                        broken or not work right. With this option, it will checkout a known good revision of LLVM
+                        that builds and works properly. If you use this option often, please remember to update the
+                        script as the known good revision will change.
+
+                        """),
+                        action="store_true")
     return parser.parse_args()
 
 
@@ -224,6 +266,17 @@ def linker_test(cc, ld):
         stderr=subprocess.DEVNULL).returncode
 
 
+def versioned_binaries(binary_name):
+    """
+    Returns a list of versioned binaries that may be used on Debian/Ubuntu
+    :param binary_name: The name of the binary that we're checking for
+    :return: List of versioned binaries
+    """
+
+    # There might be clang-6 to clang-10
+    return ['%s-%s' % (binary_name, i) for i in range(10, 5, -1)]
+
+
 def check_cc_ld_variables(root_folder):
     """
     Sets the cc, cxx, and ld variables, which will be passed to cmake
@@ -236,7 +289,7 @@ def check_cc_ld_variables(root_folder):
         cc = shutil.which(os.environ['CC'])
     # Otherwise, try to find one
     else:
-        possible_compilers = ['clang-9', 'clang-8', 'clang-7', 'clang', 'gcc']
+        possible_compilers = versioned_binaries("clang") + ['clang', 'gcc']
         for compiler in possible_compilers:
             cc = shutil.which(compiler)
             if cc is not None:
@@ -282,8 +335,8 @@ def check_cc_ld_variables(root_folder):
     else:
         # and we're using clang, try to find the fastest one
         if "clang" in cc:
-            possible_linkers = [
-                'lld-9', 'lld-8', 'lld-7', 'lld', 'gold', 'bfd'
+            possible_linkers = versioned_binaries("lld") + [
+                'lld', 'gold', 'bfd'
             ]
             for linker in possible_linkers:
                 # We want to find lld wherever the clang we are using is located
@@ -343,9 +396,27 @@ def fetch_llvm_binutils(root_folder, update, ref, shallow=False):
         if update:
             utils.print_header("Updating LLVM")
             subprocess.run(
-                ["git", "-C", p.as_posix(), "checkout", ref], check=True)
+                ["git", "-C", p.as_posix(), "fetch", "origin"], check=True)
             subprocess.run(
-                ["git", "-C", p.as_posix(), "pull", "--rebase"], check=True)
+                ["git", "-C", p.as_posix(), "checkout", ref], check=True)
+            local_ref = None
+            try:
+                local_ref = subprocess.check_output(
+                    ["git", "-C",
+                     p.as_posix(), "symbolic-ref", "-q",
+                     "HEAD"]).decode("utf-8")
+            except subprocess.CalledProcessError:
+                # This is thrown when we're on a revision that cannot be mapped to a symbolic reference, like a tag
+                # or a git hash. Swallow and move on with the rest of our business.
+                pass
+            if local_ref and local_ref.startswith("refs/heads/"):
+                # This is a branch, pull from remote
+                subprocess.run([
+                    "git", "-C",
+                    p.as_posix(), "pull", "origin",
+                    local_ref.strip().replace("refs/heads/", ""), "--rebase"
+                ],
+                               check=True)
     else:
         extra_args = ("--depth", "1") if shallow else ()
         utils.print_header("Downloading LLVM")
@@ -593,7 +664,7 @@ def stage_specific_cmake_defines(args, dirs, stage):
 
     # Use ccache for the stage 1 build as it will usually be done with a consistent
     # compiler and won't need a full rebuild very often
-    if stage == 1 and shutil.which("ccache") is not None:
+    if stage == 1 and not args.no_ccache and shutil.which("ccache"):
         defines['LLVM_CCACHE_BUILD'] = 'ON'
 
     if bootstrap_stage(args, stage):
@@ -604,15 +675,17 @@ def stage_specific_cmake_defines(args, dirs, stage):
         defines['LLVM_INCLUDE_TESTS'] = 'OFF'
         defines['LLVM_INCLUDE_UTILS'] = 'OFF'
     else:
-        # If a debug build was requested
-        if args.debug:
-            defines['CMAKE_BUILD_TYPE'] = 'Debug'
-            defines['LLVM_BUILD_TESTS'] = 'ON'
-        # If a release build was requested
-        else:
-            defines['CMAKE_BUILD_TYPE'] = 'Release'
+        # https://llvm.org/docs/CMake.html#frequently-used-cmake-variables
+        defines['CMAKE_BUILD_TYPE'] = args.build_type
+
+        # We don't care about warnings if we are building a release build
+        if args.build_type == "Release":
             defines['LLVM_ENABLE_WARNINGS'] = 'OFF'
-            defines['LLVM_INCLUDE_TESTS'] = 'OFF'
+
+        # Build with assertions enabled if requested (will slow down compilation
+        # so it is not on by default)
+        if args.assertions:
+            defines['LLVM_ENABLE_ASSERTIONS'] = 'ON'
 
         # Where the toolchain should be installed
         defines['CMAKE_INSTALL_PREFIX'] = dirs.install_folder.as_posix()
@@ -657,8 +730,10 @@ def build_cmake_defines(args, dirs, env_vars, stage):
 
     # Add {-march,-mtune} flags if the user wants them
     if args.march:
-        defines['CMAKE_C_FLAGS'] = '-march=%s -mtune=%s' % (args.march, args.march)
-        defines['CMAKE_CXX_FLAGS'] = '-march=%s -mtune=%s' % (args.march, args.march)
+        defines['CMAKE_C_FLAGS'] = '-march=%s -mtune=%s' % (args.march,
+                                                            args.march)
+        defines['CMAKE_CXX_FLAGS'] = '-march=%s -mtune=%s' % (args.march,
+                                                              args.march)
 
     # Add the vendor string if necessary
     if args.clang_vendor:
@@ -711,6 +786,7 @@ def invoke_ninja(args, dirs, stage):
     Invoke ninja to run the actual build
     :param args: The args variable generated by parse_parameters
     :param dirs: An instance of the Directories class with the paths to use
+    :param stage: The current stage we're building
     :return:
     """
     utils.print_header("Building LLVM stage %d" % stage)
@@ -728,6 +804,12 @@ def invoke_ninja(args, dirs, stage):
     time_started = time.time()
 
     subprocess.run('ninja', check=True, cwd=build_folder)
+
+    if args.check_targets and stage == get_final_stage(args):
+        subprocess.run(['ninja'] +
+                       ['check-%s' % s for s in args.check_targets],
+                       check=True,
+                       cwd=build_folder)
 
     print()
     print("LLVM build duration: " +
@@ -807,7 +889,11 @@ def main():
 
     env_vars = EnvVars(*check_cc_ld_variables(root_folder))
     check_dependencies()
-    fetch_llvm_binutils(root_folder, not args.no_pull, args.branch, args.shallow_clone)
+    if args.use_good_revision:
+        ref = GOOD_REVISION
+    else:
+        ref = args.branch
+    fetch_llvm_binutils(root_folder, not args.no_update, ref, args.shallow_clone)
     cleanup(build_folder, args.incremental)
     dirs = Directories(build_folder, install_folder, root_folder)
     do_multistage_build(args, dirs, env_vars)
