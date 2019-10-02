@@ -17,7 +17,7 @@ if [[ "$1" == "--ci" ]] || [[ "$DRONE" == "true" ]]; then
 else
 	msg "Configuring full-fledged LLVM build..."
 	llvm_args=(--targets "ARM;AArch64;X86" --march "native" --lto full)
-	binutils_args=(--targets arm aarch64 x86_64)
+	binutils_args=(--targets arm aarch64 x86_64 --march "native")
 fi
 
 # Build LLVM
