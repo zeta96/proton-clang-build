@@ -91,8 +91,7 @@ def parse_parameters(root_folder):
                         Add -march=ARCH and -mtune=ARCH to CFLAGS to optimize the toolchain for the target
                         host processor.
                         """,
-                        type=str,
-                        default="native")
+                        type=str)
     return parser.parse_args()
 
 
@@ -145,13 +144,19 @@ def invoke_configure(build_folder, install_folder, root_folder, target,
     :param target: Target to compile for
     :param host_arch: Host architecture to optimize for
     """
+    if host_arch:
+        arch_flags = ' -march=%s -mtune=%s' % (host_arch, host_arch)
+    else:
+        arch_flags = ''
+
     configure = [
         root_folder.joinpath(utils.current_binutils(), "configure").as_posix(),
         '--prefix=%s' % install_folder.as_posix(),
         '--enable-deterministic-archives', '--enable-plugins', '--quiet',
-        'CFLAGS=-O2 -march=%s -mtune=%s' % (host_arch, host_arch),
-        'CXXFLAGS=-O2 -march=%s -mtune=%s' % (host_arch, host_arch)
+        'CFLAGS=-O2%s' % arch_flags,
+        'CXXFLAGS=-O2%s' % arch_flags
     ]
+
     configure_arch_flags = {
         "arm-linux-gnueabi": [
             '--disable-multilib', '--disable-nls', '--with-gnu-as',
