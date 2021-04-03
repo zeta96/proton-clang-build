@@ -16,7 +16,7 @@ msg "Building LLVM..."
 	--clang-vendor "Proton" \
 	--targets "ARM;AArch64;X86" \
 	"$repo_flag" \
-	--pgo \
+	--pgo kernel-defconfig \
 	--lto full
 
 # Build binutils
