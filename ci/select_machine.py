@@ -35,6 +35,10 @@ else:
 
 def check_locations(prices, max_price, locations):
     for loc in locations:
+        # Not all machines are available in all locations
+        if loc not in prices:
+            continue
+
         # Intrinsic: $XX.01 == market full and request will not be fulfilled
         price_fract = prices[loc] - round(prices[loc])
         market_full = price_fract >= 0.0095 and price_fract <= 0.015
@@ -50,7 +54,9 @@ def select_machine():
             data = r.json()["spot_market_prices"]
 
         prices = {loc: list(matches.values())[0]["price"] for loc, matches in data.items()}
-        max_price = ondemand_price * 4 # 10x == no spot market capacity available, but it's closer to 4x for g2.large (+ 0.01)
+        # 10x == no spot market capacity available, but it's closer to 4x for g2.large (+ 0.01)
+        max_price = ondemand_price * 4
+
         location, price = check_locations(prices, max_price, preferred_locations)
         if location:
             return {
