@@ -35,7 +35,11 @@ else:
 
 def check_locations(prices, max_price, locations):
     for loc in locations:
-        if loc in prices and prices[loc] < max_price:
+        # Intrinsic: $XX.01 == market full and request will not be fulfilled
+        price_fract = prices[loc] - round(prices[loc])
+        market_full = price_fract >= 0.0095 and price_fract <= 0.015
+
+        if loc in prices and prices[loc] < max_price and not market_full:
             return loc, prices[loc]
     
     return (None, None)
