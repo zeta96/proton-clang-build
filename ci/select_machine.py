@@ -6,16 +6,41 @@ import sys
 import requests
 
 
-# Mostly core datacenters, ranked by latency from the author's location
+# Mostly core datacenters, ranked by latency from the maintainer's location
 preferred_locations = (
-    "sv15",  # non-core
-    "sjc1",
+    "sv15",
     "dfw2",
     "iad1",
     "ewr1",
     "nrt1",
     "ams1",
     "sin3",
+
+    # Other facilities as fallbacks
+    "am6",
+    "ch3",
+    "da11",
+    "dc13",
+    "fr2",
+    "fra2",
+    "hk2",
+    "hkg1",
+    "iad2",
+    "la4",
+    "lax1",
+    "ld7",
+    "mrs1",
+    "ny5",
+    "ny7",
+    "pa4",
+    "sea1",
+    "sg1",
+    "sjc1",
+    "sl1",
+    "sy4",
+    "syd2",
+    "tr2",
+    "yyz1",
 )
 
 preferred_machines = (
